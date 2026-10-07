@@ -361,8 +361,30 @@ matches after each step.
 
 - **The packaged `.exe` builds.** Each is around 580 MB of compiled artefact. I kept 16
   versioned builds during the project and logged all of them in `VERSION_LOG.md`,
-  including `HandCursor_v9`, which is broken and should not be used. `build_release.py`
-  rebuilds one and runs a start-up sanity check before writing a log entry.
+  including `HandCursor_v9`, which is broken and should not be used.
+
+  Two of those builds are the ones worth having, and both rebuild in a few minutes:
+
+  ```
+  # the recommended general-purpose build (default configuration)
+  python build_release.py --entry hand_mouse_cursor.py --name-base HandCursor ^
+      --summary "general-purpose build"
+
+  # the final experimental dark build (fine-tuned detector, motion blobs, both agreement rules)
+  python build_release.py --entry hand_mouse_dark.py --name-base HandCursorDark ^
+      --summary "dark-specialised variant"
+  ```
+
+  Each command packages the source into `dist/<name>/`, runs the resulting exe directly
+  with cwd set to its own folder (the double-click path), checks that the verifier loads
+  and that it reaches the webcam step, then appends a row to `VERSION_LOG.md`. It refuses
+  to overwrite an existing build, so the version numbers keep incrementing.
+
+  They are not in this repo because they cannot be. `_internal/torch/lib/torch_cpu.dll`
+  alone is 291 MB, and GitHub rejects any push containing a file over 100 MB. Zipping a
+  build only gets it to about 200 MB, which is still over the limit, so the choice was
+  between Git LFS (which needs the grader to have git-lfs installed, and would use most
+  of the free storage quota) and leaving them out. I left them out.
 - **The HaGRID data and the crop datasets.** 10 GB of images plus about 1.4 million
   generated crops. The download and build commands are above.
 - **Intermediate evaluation logs.** `results/` holds the outputs for the configurations
