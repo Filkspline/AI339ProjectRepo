@@ -417,29 +417,3 @@ matches after each step.
   out of the repo and the README explains how to rebuild them. If you rebuild them, the
   same terms apply to whatever you generate.
 
-## Limitations
-
-I would rather state these than have someone find them later.
-
-- All my real dark data comes from **one person, one room, one lamp, one camera**, about
-  200 labelled frames. The held-out dark frames are held out by frame, not by condition,
-  so I can claim "this lighting", not "artificial light in general".
-- Every model was trained **once**, with seed 0. I have no variance estimate for any of
-  them. Re-running the same evaluation on the same model varies by about +-1.3 F1 points
-  between sessions, because the harness passes wall-clock timings into the plausibility
-  gate, so differences below that are not meaningful.
-- MediaPipe is not only my baseline, it is also the source of my ground truth and the
-  arbiter I used to clean the training labels. If its hand detection is weaker for some
-  hands than others, that bias is in my data too.
-- The motion-blob path locks onto a synthetic moving non-hand object every time it locks
-  at all. No recorded clip contains real moving clutter, so that failure mode is untested
-  on real footage.
-- Nothing detects camera motion. The motion gate assumes a static camera.
-- There is no click action and no gesture vocabulary. The system moves a pointer.
-- The agreement rules cut wrong-place cursor movement by 59% and take the no-hand
-  false-lock rate to zero, but they cost recall, and they make `CloseDarkStill` worse
-  rather than better, because on that clip the true detections are the brief ones and the
-  false ones are steady. Agreement over time cannot fix a stable false positive.
-
-The design notes in `docs/` go into each round in more detail, including the things that
-did not work.
