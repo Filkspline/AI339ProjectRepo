@@ -1,0 +1,19 @@
+# Versions I actually ran, on Windows, CPU only (no CUDA).
+torch==2.13.0
+opencv-python==5.0.0.93
+numpy==2.2.6
+pyautogui==0.9.54
+
+# Everything below is only needed for particular scripts, so it is commented out
+# rather than installed by default.
+
+# Rebuilding the HaGRID crop sets from the parquet mirror (build_verifier_dataset.py)
+# pyarrow==25.0.1
+
+# Reproducing the ground-truth caches (gt_clips.py, gt_clips_static.py,
+# gt_verylowlight.py) and the independent label arbiter. Install this in a separate
+# environment: mediapipe pins its own numpy and protobuf versions.
+# mediapipe
+
+# Packaging a release build (build_release.py)
+# pyinstaller==6.22.3

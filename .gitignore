@@ -1,0 +1,36 @@
+# Virtual environments
+.venv/
+.venv-blazepalm/
+.uv-cache/
+env/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# PyInstaller scratch and the packaged builds. The builds are about 580 MB each
+# and are compiled artefacts, not source. build_release.py recreates them.
+build/
+dist/
+*.spec
+
+# HaGRID downloads and the generated crop sets. These are several GB and the
+# dataset licence does not cover redistributing derived crops.
+hagrid512/
+big_smoke/
+*_dataset/
+*.parquet
+
+# Editor and OS clutter
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch output
+scratch/
+*.tmp

@@ -1,0 +1,36 @@
+PIPELINE COMPARISON -- recorded clip library
+====================================================================================================
+Our pipeline: BlazePalm palm detector -> acquisition size+motion gate ->
+              CNN crop verifier -> search-window tracking (the shipped app).
+MediaPipe baseline: mp.solutions.hands in tracking mode, per frame.
+Ground truth for BOTH: MediaPipe static mode (lag-free, per-frame), gaps
+filled from +-5 frames. A reported position counts as correct when it is
+within max(0.06 frame widths, 0.6 x palm width) of a truth hand.
+
+clip                  conditionpipeline               accept%  precision%  recall%    F1% false locks%  ms/frame
+----------------------------------------------------------------------------------------------------------------
+CloseLightMoving.mp4  hand     MediaPipe (tracking)     100.0       100.0    100.0  100.0            -       0.3
+CloseLightMoving.mp4  hand     Ours (verifier_cnn_big.pt @0.61)    90.8       100.0     90.8   95.2            -      21.2
+CloseLightStill.mp4   hand     MediaPipe (tracking)     100.0       100.0    100.0  100.0            -       0.3
+CloseLightStill.mp4   hand     Ours (verifier_cnn_big.pt @0.61)    45.0       100.0     45.0   62.0            -      21.7
+CloseDarkStill.mp4    hand     MediaPipe (tracking)      98.9       100.0     98.9   99.5            -       0.3
+CloseDarkStill.mp4    hand     Ours (verifier_cnn_big.pt @0.61)     3.2       100.0      3.2    6.2            -      21.0
+FarLight.mp4          hand     MediaPipe (tracking)      62.1        86.0     65.8   74.6            -       2.3
+FarLight.mp4          hand     Ours (verifier_cnn_big.pt @0.61)    23.6        30.4      8.9   13.7            -      25.4
+FarDark.mp4           hand     MediaPipe (tracking)      59.1        95.6     65.7   77.8            -       1.1
+FarDark.mp4           hand     Ours (verifier_cnn_big.pt @0.61)    12.2       100.0     14.1   24.8            -      22.4
+NohandLight.mp4       nohand   MediaPipe (tracking)       0.0           -        -      -          0.0       0.5
+NohandLight.mp4       nohand   Ours (verifier_cnn_big.pt @0.61)    26.7         0.0        -      -         26.7      22.5
+NohandDark.mp4        nohand   MediaPipe (tracking)       0.0           -        -      -          0.0       0.4
+NohandDark.mp4        nohand   Ours (verifier_cnn_big.pt @0.61)     0.0           -        -      -          0.0      20.8
+VeryLowLight.mp4      hand     MediaPipe (tracking)      60.8        72.5     59.1   65.1            -       0.3
+VeryLowLight.mp4      hand     Ours (verifier_cnn_big.pt @0.61)    23.3        69.1     21.6   32.9            -      20.7
+
+AGGREGATE (hand clips only; no-hand clips are scored by false-lock rate)
+----------------------------------------------------------------------------------------------------------------
+MediaPipe (tracking)   hand clips: truth frames 1319, accepted 1129 (72.7% of frames) | precision 88.3% recall 75.6% F1 81.5% | no-hand false-lock rate 0.0%
+Ours (verifier_cnn_big.pt @0.61) hand clips: truth frames 1319, accepted 481 (31.0% of frames) | precision 83.6% recall 30.5% F1 44.7% | no-hand false-lock rate 12.3%
+
+Note: no-hand clips are CloseLightMoving's static counterparts only in the
+sense of containing no hand at all (NohandLight/NohandDark); any accepted
+position there is a false lock by construction.

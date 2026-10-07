@@ -1,0 +1,17 @@
+clip,clip_kind,pipeline,frames,truth_frames,acceptance_rate_pct,true_positives,false_positives,precision_pct,recall_pct,f1_pct,false_lock_rate_pct,ms_per_frame
+CloseLightMoving.mp4,hand,MediaPipe (tracking),174,174,100.0,174,0,100.0,100.0,100.0,,0.3
+CloseLightMoving.mp4,hand,Ours (verifier_cnn_big.pt @0.61),174,174,90.2,156,1,99.4,89.7,94.3,,36.4
+CloseLightStill.mp4,hand,MediaPipe (tracking),209,209,100.0,209,0,100.0,100.0,100.0,,0.3
+CloseLightStill.mp4,hand,Ours (verifier_cnn_big.pt @0.61),209,209,75.1,99,58,63.1,47.4,54.1,,39.9
+CloseDarkStill.mp4,hand,MediaPipe (tracking),94,94,98.9,93,0,100.0,98.9,99.5,,0.3
+CloseDarkStill.mp4,hand,Ours (verifier_cnn_big.pt @0.61),94,94,58.5,9,46,16.4,9.6,12.1,,29.2
+FarLight.mp4,hand,MediaPipe (tracking),195,158,62.1,104,17,86.0,65.8,74.6,,2.3
+FarLight.mp4,hand,Ours (verifier_cnn_big.pt @0.61),195,158,74.9,80,66,54.8,50.6,52.6,,37.0
+FarDark.mp4,hand,MediaPipe (tracking),230,198,59.1,130,6,95.6,65.7,77.8,,1.1
+FarDark.mp4,hand,Ours (verifier_cnn_big.pt @0.61),230,198,58.7,86,49,63.7,43.4,51.7,,28.9
+NohandLight.mp4,nohand,MediaPipe (tracking),45,0,0.0,0,0,,,,0.0,0.4
+NohandLight.mp4,nohand,Ours (verifier_cnn_big.pt @0.61),45,0,2.2,0,1,0.0,,,2.2,21.9
+NohandDark.mp4,nohand,MediaPipe (tracking),53,0,0.0,0,0,,,,0.0,0.4
+NohandDark.mp4,nohand,Ours (verifier_cnn_big.pt @0.61),53,0,0.0,0,0,,,,0.0,20.8
+VeryLowLight.mp4,hand,MediaPipe (tracking),651,486,60.8,287,109,72.5,59.1,65.1,,0.3
+VeryLowLight.mp4,hand,Ours (verifier_cnn_big.pt @0.61),651,486,30.7,109,91,54.5,22.4,31.8,,33.4
