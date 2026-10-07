@@ -1,0 +1,727 @@
+\documentclass[conference,a4paper]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{url}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Hand Gesture Mouse Control for Lean-Back Computing}
+
+\author{\IEEEauthorblockN{Leo}
+\textit{Victoria University of Wellington}\\
+AIML339 Final Project Report}
+
+\maketitle
+
+\begin{abstract}
+We ask whether a decision-and-verification layer around an existing palm
+detector can drive a screen cursor by hand at 2 to 4 m in dim artificial
+light, where MediaPipe Hands degrades. We adopt a third-party PyTorch port
+of BlazePalm, train a 60,929-parameter crop verifier to replace a hand-tuned
+size gate, add a classical motion gate, and fine-tune 2.49\% of the
+detector's parameters on about 200 dark frames. Scoring all seven systems in
+one session against identical ground truth, the shipped system reaches F1
+50.3\% against MediaPipe's 81.6\%, with no false locks on empty-room footage
+for any configuration. Paired tests support that gap: MediaPipe decides
+correctly on 553 frames where the shipped system does not against 38 the
+other way (Holm-adjusted $p<10^{-100}$), with an F1 difference of $+0.31$
+whose 95\% block-bootstrap interval is $+0.23$ to $+0.40$. At close range F1
+is 85 to 94\% against 100\%. A dark-specialised variant raises
+VeryLowLight F1 from 10.4\% to 31.5\%, but that clip was partly used for
+fine-tuning and the variant collapses on close static hands (93.8\% to
+9.4\%). A staged analysis shows the palm detector loses 64.3\% of
+target-condition hand frames, which is 86\% of all frames lost once the
+verifier is fixed. Negative results: two classical contrast baselines in
+front of unmodified MediaPipe (F1 80.4 with CLAHE, 79.8 with gamma, against
+81.6 raw), a logistic baseline worse than no filtering, and a motion-blob
+path with a 4.8-point ceiling. Verifier variants were retrained with 3 to 10
+seeds each; held-out AUC is stable to within 0.008, while the operating
+threshold chosen on 151 validation frames is not.
+\end{abstract}
+
+\begin{IEEEkeywords}
+hand tracking, gesture interaction, MediaPipe, BlazePalm, learned verification, low-light detection
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+The target is a gesture mouse for lean-back computing: a webcam tracks a
+hand 2 to 4 m from the screen, in dim artificial light, and the hand drives
+the cursor. Three measured properties define the problem. First, range: the
+palm box is about 0.085 of the frame width (136 px at 1920 wide, 116 px at
+1280). Second, lighting: our target-condition recording, VeryLowLight, has
+median luma 43.5 against 29 to 146 for the other clips, contrast (standard
+deviation) near 17 against 36 to 53, and a colour cast R/B of 1.79 against
+1.05 to 1.21. MediaPipe detects a hand in only 60.8\% of its frames in
+tracking mode and 44.7\% in static mode on this clip. Third, latency
+tolerance is asymmetric: slow, deliberate movement is fine, but a cursor
+that jumps to the wrong place is not.
+
+\textbf{Research question.} Does a decision-and-verification layer around a
+MediaPipe-class palm detector beat MediaPipe at range and in low light, and
+where does the remaining error come from?
+
+\textbf{Change from the proposal.} The proposal was to modify MediaPipe's
+tracking architecture and add an open/closed hand-state output. We
+abandoned that for a PyTorch port of BlazePalm, because none of the
+components below can be inserted into a compiled MediaPipe graph. The
+open/closed output was dropped when the landmark model's presence score
+fell to a median of 0.001 on VeryLowLight at locations MediaPipe itself
+labels as a hand (1.000 in daylight). The final system reports hand
+location and lock state only.
+
+\textbf{Contribution.} This is not a new hand-tracking architecture. It is
+(i) a staged attribution of where a detector-based pipeline fails at range
+and in low light, (ii) a set of small learned and classical components,
+each measured on its own, and (iii) several documented failures.
+Section~\ref{sec:method} separates reused, modified, extended and new work.
+
+\section{Background and Related Work}
+
+\textbf{MediaPipe Hands and BlazePalm.} MediaPipe Hands \cite{mediapipe}
+uses a palm detector to propose a box, then a landmark model regresses 21
+keypoints in a rotation-normalised crop. The detector is a single-shot
+regressor in the BlazeFace family \cite{blazeface}, with 2944 unit-size
+anchors and six 1$\times$1 heads, released in the MediaPipe graph
+\cite{mediapipe_github}. We use the PyTorch reimplementation of Satija
+\cite{blazepalm_port}, which loads Google's released weights and is not
+retrained. Because its anchors are all unit-size, MediaPipe's scale-aware
+anchor matching does not carry over, which matters for fine-tuning
+(Section~\ref{sec:method}).
+
+\textbf{Data.} HaGRID \cite{hagrid} and HaGRIDv2 \cite{hagrid2} contain
+hands recorded at 0.5 to 4 m under varied light, which matches our range
+but has no true near-dark footage. We pulled HaGRIDv2 from two Hugging Face
+mirrors (Section~\ref{sec:ethics}).
+
+\textbf{Baseline choice.} MediaPipe is both the method we try to improve on
+and, through its landmark presence head, our label arbiter. Its detection
+output also defines the ground truth, so every result here measures
+agreement with MediaPipe, not with a human annotator. We also test the
+cheap rival that a low-light report is expected to rule out: classical
+contrast enhancement in front of unmodified MediaPipe, specifically CLAHE
+\cite{clahe} on the L channel of LAB (clip limit 2.0, $8\times8$ tiles) and
+luminance gamma correction at $\gamma=0.5$. Both are applied with textbook
+parameters fixed in advance, not tuned on any part of our data. Neither
+helps (Section~\ref{sec:results}), which is a negative result we report
+rather than omit: it means the target-condition loss is not a contrast
+problem that a preprocessing step can solve.
+
+\section{Methodology and Implementation}
+\label{sec:method}
+
+\subsection{What was reused, modified, extended and built}
+Reused: the BlazePalm architecture and its released weights (1,763,358
+parameters), MediaPipe as the baseline, the ground truth and the label
+arbiter, and the PyTorch and OpenCV libraries. Modified: the six
+$1\times1$ prediction heads (43,966 parameters, 2.49\%), fine-tuned for
+the dark variant only, with the original weights kept byte-identical.
+Extended: the acquisition motion gate together with the relaxed size gate
+it makes safe, the motion-blob proposals, and the two consensus rules.
+Built here: the CNN verifier and its data pipeline, the logistic baseline,
+the state machine with its plausibility gate, smoothing and cursor control,
+and the evaluation harness with its arbiter-based label cleaning.
+
+\begin{figure}[t]
+\centerline{\includegraphics[width=0.49\textwidth]{fig1_pipeline.png}}
+\caption{Pipeline. The verifier confirms every candidate from the detector
+or the blob path before it can move the cursor. The motion gate acts during
+acquisition only.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Palm detector and fine-tune}
+The detector takes a 256$\times$256 letterboxed frame scaled to $[-1,1]$
+and decodes boxes from 2944 anchors. The port discards scores below 0.7
+before weighted NMS, so the application's own 0.5 floor never binds. For
+the dark variant only, we freeze everything except the six 1$\times$1 heads
+and fine-tune on about 200 VeryLowLight frames (Adam, lr $3\times10^{-4}$,
+batch 4, 20 epochs, seed 0). The loss is
+$\mathcal{L}_{\text{cls}} + 0.5\,\mathcal{L}_{\text{reg}}$, with positive
+weight 5.0 and a masked smooth-L1 over the box and two of the seven
+keypoints. Labelling every anchor inside the ground-truth box (about 96 of
+2944) positive destroyed the score head, firing on 337 anchors instead of
+13, so the shipped version matches only the 6 anchors nearest the box centre
+and a guard refuses to save a model firing on more than 100 anchors.
+
+\subsection{Crop verifier}
+A small CNN (four stride-2 Conv--BatchNorm--ReLU blocks,
+3$\to$16$\to$32$\to$64$\to$64 channels, global average pooling, one linear
+output; 60,929 parameters) takes the 64$\times$64 RGB rotation-normalised
+crop the pipeline already computes and outputs $P(\text{hand})$. It
+replaces a box-size gate that was the main source of false locks at range.
+Training uses BCE, Adam, lr $2\times10^{-3}$, batch 64, 8 epochs, on a
+class-balanced subsample. Four variants were shipped, trained on 11k, 130k
+(arbiter-filtered), 32k (VeryLowLight-specific) and 84k (dark-augmented)
+crops. Photometric and distance augmentation is applied identically to both
+classes so that brightness and sharpness cannot serve as shortcuts.
+
+Positives for the large sets were mined as the detector's top detection on
+a gesture-labelled image, which confuses \emph{the image contains a hand}
+with \emph{this detection is the hand}. An independent arbiter (the
+landmark model's presence head, used offline) rejected 41.6\% of 30,000
+mined crops, reproduced at 41.9\% on 31,006 further detections. Training on
+the unfiltered set cut held-out AUC from 0.965 to 0.808.
+
+\subsection{Motion gate and motion blobs}
+\label{subsec:motion}
+Every remaining false lock sat on a static object, while even a held-still
+hand has micro-tremor. We apply a motion gate during acquisition only: over
+a 5-frame, 320-px-wide luma ring, the fraction of pixels whose bias- and
+gain-compensated value changes by more than $12/255$. Mean absolute
+difference and temporal standard deviation both failed a deliberate test,
+because they could not separate a held-still hand (score 0.036 to 0.083)
+from the noisiest static clutter tile. The changed-pixel fraction separates
+them with at least a 3.6$\times$ margin and is immune to a simulated
+$\pm15\%$ auto-exposure ramp (0.0000 compensated against 1.0000
+uncompensated). This allowed the acquisition size gate to drop from 0.15 to
+0.10. Connected components of the same difference signal also propose
+candidate regions (motion blobs), confirmed by the same verifier.
+
+\subsection{Cursor logic}
+The state machine alternates between REACQUIRE (full-frame detection plus
+motion gate) and TRACK (a search window around the last position, which
+gives the detector more effective pixels on a far hand). A plausibility
+gate rejects jumps above 3 frame-widths per second. An EMA ($\tau=0.35$ s)
+smooths positions before a cursor limited to 1 screen-width per second. The
+dark variant adds 3-pass spatial consensus on acquisition and a TRACK hold:
+a candidate more than 0.06 frame-widths from the committed position waits
+for 3 agreeing candidates or 6 frames.
+
+\section{Experimental Settings}
+
+\subsection{Baselines}
+MediaPipe Hands (0.10.14, tracking mode) is the incumbent and the method we
+modify. A logistic regression on 8 interpretable crop statistics
+(foreground fill, radial reach, compactness, edge density, intensity
+moments; 9 parameters) is the simple learned baseline for the verifier. The
+box-size gate is the ``before'' state for the verifier ablation.
+Unmodified BlazePalm weights are the ``before'' state for the fine-tune.
+
+\subsection{Data and splits}
+Eight clips were recorded by the author: CloseLightMoving, CloseLightStill,
+CloseDarkStill, FarLight, FarDark, VeryLowLight (651 frames, the target
+condition), and two empty-room clips (NohandLight, NohandDark). Truth is
+MediaPipe's static-mode output, lag-free, with gaps filled within $\pm5$
+frames, giving 1,319 truth frames over the six hand clips (1,553 frames in
+all). The first seven clips were recorded earlier and form the 7-clip
+integrated evaluation used for ablations, which excludes VeryLowLight.
+Precision, recall and F1 are per frame. Accepted frames are those where the
+system reports a position.
+
+Verifier training data come from HaGRIDv2 (11k to 130k crops; HaGRID-level
+validation and test splits are held out) plus 100 crops from the author's
+room. VeryLowLight is split into 50-frame blocks dealt to three roles by a
+seeded shuffle, split seed 0: 250 training frames (blocks 0, 2, 3, 4, 5),
+151 validation frames (blocks 7, 10, 11, 13) and 250 test frames (blocks 1,
+6, 8, 9, 12). All model and threshold selection uses training and
+validation data only, and the test blocks are scored once. Three limits
+apply and are not resolved. (1) The validation blocks are not
+representative of the test blocks, which is a property of the recording
+rather than of the systems: brightness drifts across it, so blocks are not
+exchangeable. Dark v3 scores F1 14.6 on the validation blocks and 43.5 on
+the test blocks, a threefold difference, and we report both rather than the
+flattering one. Threshold selection, which is what the validation blocks
+are used for, is therefore weakly constrained (Section~\ref{sec:seeds}).
+(2) The end-to-end F1 figures of Table~\ref{tab:main} are computed over the
+whole VeryLowLight clip, which includes the blocks used for fine-tuning, so
+that column flatters the fine-tuned configurations; on the test blocks
+alone the same systems score MediaPipe 81.2, default 9.0, big-verifier 10.8
+and dark v3 43.5. The other five hand clips were not used for fine-tuning,
+though several operating parameters were chosen on them. (3) All dark data
+is one person, room, lamp, camera and session.
+
+\subsection{Parameters}
+Table~\ref{tab:params} lists the key settings. Where we swept, we varied
+one parameter at a time. Learning rates, batch sizes and epochs follow
+common small-model defaults and were not swept.
+
+\begin{table}[t]
+\caption{Selected parameters and how they were chosen}
+\label{tab:params}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{0.30\linewidth}p{0.13\linewidth}p{0.47\linewidth}@{}}
+\toprule
+Parameter & Value & Chosen by \\
+\midrule
+Acquisition size gate & 0.10 & swept 0.15, 0.10, 0.08, 0.06 \\
+Motion gate floor & 0.01 & calibrated: 0.036 weakest still hand vs.\ 0.000 static room \\
+Verifier thr.\ (default) & 0.30 & swept 0.20 to 0.50, clutter rejection at fixed recall \\
+Verifier thr.\ (130k model) & 0.61 & swept, matched own-room clutter cut (91.3\%) \\
+Detector positive weight & 5.0 & 20.0 collapsed the head \\
+Detector matched anchors & 6 & about 96 (naive) failed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The remaining settings come from measurement rather than sweeps: the
+agreement rules use 3 passes within 0.05 frame widths to acquire and a TRACK
+hold of 3 passes within 0.06 frame widths bounded to 6 frames, both read off
+the measured frame-to-frame displacements; the plausibility limit is 3 frame
+widths per second, the EMA $\tau=0.35$ s and the cursor cap 1 screen-width
+per second are design choices from the hand-speed prior and a rate limit.
+
+\subsection{Repeated runs, seeds and determinism}
+All randomised components use a fixed, recorded seed list: split seed 0 for
+the target-condition blocks, training seeds 0 to 9 for the verifier
+variants and the detector fine-tune, and bootstrap seed 12{,}345 for the
+resampling in Section~\ref{sec:results}. No seed is derived from clock
+time. Section~\ref{sec:seeds} reports how many seeds each component
+actually completed.
+
+An earlier version of this harness gave F1 varying by about $\pm1.3$ points
+between runs of the same fixed model, which we had called a noise floor. It
+was not variance in the models. The plausibility gate (a speed limit in
+frame widths per second) and the tracking loss timer are both time based,
+and the replay harness fed them wall-clock \texttt{dt}, so replaying a clip
+faster or slower than the machine happened to run changed which detections
+were accepted. Timing now comes from the frame index and the clip's own
+frame rate, and nothing in the decision path reads the clock. Repeating one
+configuration three times then gives byte-identical output on all 16 clip
+and pipeline rows, the only differing column being milliseconds per frame,
+which measures the machine by design. The noise floor for evaluation is
+therefore exactly zero, differences of any size are interpreted, and the
+session caveat the previous comparison table carried is gone: all seven
+systems are scored in one session against one truth. Mechanism changes are
+checked separately by deterministic tests, a 13-sequence 6,300-step
+equivalence test for a state-machine refactor and scripted flicker tests for
+the consensus rules. Hardware: AMD Ryzen 5 7500F (6 cores), no GPU, Windows
+10, Python 3.10.20, PyTorch 2.13.0+CPU, OpenCV 5.0.0.
+
+\section{Results and Analysis}
+\label{sec:results}
+
+\subsection{Comparison with MediaPipe}
+Table~\ref{tab:main} gives the main result. MediaPipe leads in aggregate
+(F1 81.6\% against 45.4 to 52.5\%), mostly through recall (75.7\% against
+32.7 to 40.0\%). At close range the gap narrows to 6 to 15 F1 points on the
+first two clips, and no configuration produced a false lock on either
+empty-room clip: every one of the seven systems scored 0.0\% on both. The
+130k-crop verifier at 0.61 (52.5) is the best of our configurations on the
+target clip, at more than twice the default's F1 there (10.4 to 21.5), and
+it is also the best in aggregate, though Section~\ref{sec:stats} shows that
+difference is not separable from noise.
+
+\textbf{Contrast preprocessing does not help, and we test it rather than
+assume it.} CLAHE in front of unmodified MediaPipe reaches F1 80.4 and
+gamma 0.5 reaches 79.8, both below the 81.6 of raw MediaPipe, and both lose
+more frames than they win: CLAHE is correct on 29 frames where raw
+MediaPipe is wrong and wrong on 55 where raw is right (exact McNemar
+$p_{\text{Holm}}=0.018$). The damage concentrates where the sensor is
+already near its noise floor: on VeryLowLight both lose (65.1 raw, 61.8
+CLAHE, 62.2 gamma), while on FarLight CLAHE gains slightly (75.0 to 76.7)
+and gamma loses badly (66.7). CLAHE raises precision marginally (88.9
+against 88.3) by accepting 42 fewer frames, which is what amplifying local
+contrast on noisy footage does: more selective without being better. What
+this rules out is that the target-condition failure is a contrast deficit
+a preprocessing stage can repair, consistent with the attribution below,
+where the loss happens before any appearance-based decision.
+
+\begin{table}[t]
+\caption{F1 (\%) per clip, then aggregate precision, recall and false
+locks. All seven systems were scored in one session against identical
+ground truth, so no column is from a different run. Higher F1 is better;
+lower FL is better. MP = MediaPipe in tracking mode. +C = unmodified
+MediaPipe behind CLAHE; gamma 0.5 is quoted in the text. Big = 130k-crop
+verifier at 0.61. Dark v3 = fine-tuned detector plus acquisition
+consensus; v4 adds the TRACK hold. FL = false-lock rate (\%) on
+NohandLight/NohandDark; every configuration scored 0.0 on both.}
+\label{tab:main}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+ & MP & +C & Default & Big & Dark v3 & Dark v4 \\
+\midrule
+CloseLightMoving & 100.0 & 100.0 & 86.4 & 85.8 & 93.6 & 90.2 \\
+CloseLightStill & 100.0 & 100.0 & 92.5 & 92.5 & 54.6 & 51.6 \\
+CloseDarkStill & 100.0 & 100.0 & 93.8 & 90.1 & 9.4 & 6.1 \\
+FarLight & 75.0 & 76.7 & 32.3 & 34.5 & 50.2 & 34.6 \\
+FarDark & 77.8 & 75.3 & 14.9 & 12.1 & 50.9 & 51.6 \\
+VeryLowLight & 65.1 & 61.8 & 10.4 & 21.5 & 31.5 & 28.0 \\
+\midrule
+Aggregate F1 & 81.6 & 80.4 & 50.3 & 52.5 & 48.8 & 45.4 \\
+Precision & 88.3 & 88.9 & 79.2 & 77.0 & 62.6 & 74.2 \\
+Recall & 75.7 & 73.4 & 36.8 & 39.9 & 40.0 & 32.7 \\
+Accepted (of 1,553) & 1,131 & 1,089 & 614 & 683 & 844 & 581 \\
+FL Light/Dark & 0/0 & 0/0 & 0/0 & 0/0 & 0/0 & 0/0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Where the target-condition loss occurs}
+Of the 291 VeryLowLight frames where lag-free MediaPipe sees a hand (a
+stricter count than the 486 truth frames used for F1), the detector fails
+to produce a hand-containing box on 187 (64.3\%): 77 with no detection and
+110 off the hand (Fig.~\ref{fig:funnel}). The size and motion gates then
+remove 18 more. With the default verifier, 70 of the 86 crops that reach it
+are rejected (81\%) and only 16 frames (5.5\%) survive. With the 130k
+verifier, 13 are rejected (15\%) and 73 (25.1\%) survive. The detector
+therefore accounts for 68\% of all lost frames under the default verifier
+and 86\% (187 of 218) once the verifier is fixed.
+
+\begin{figure}[t]
+\centerline{\includegraphics[width=0.49\textwidth]{fig2_funnel.png}}
+\caption{Where VeryLowLight hand frames are lost, for two verifier
+configurations. Counts and share of the 291 frames.}
+\label{fig:funnel}
+\end{figure}
+
+This is not a confidence problem. The share of frames with any detection is
+59.8\% at every score threshold from 0.3 to 0.7, with median best score
+0.76. The detector fires confidently, just often not on the hand. On
+clean, well-lit HaGRID images its top detection is off the hand in about
+42\% of cases, so the failure is not specific to our footage.
+
+\subsection{Ablations}
+Table~\ref{tab:ablation} gives operating points on the 7-clip integrated
+evaluation.
+
+\begin{table}[t]
+\caption{Ablations on the 7-clip integrated evaluation (the five original
+hand clips plus two empty-room clips): hand frames kept (more is better)
+and clutter locks (fewer is better). One run per row.}
+\label{tab:ablation}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{0.62\linewidth}rr@{}}
+\toprule
+Configuration & Hand frames & Clutter locks \\
+\midrule
+Box-size gate only (0.04) & 499 & 156 \\
+Logistic baseline, 8 features (0.30) & 379 & 190 \\
+CNN verifier at 0.20 & 490 & 143 \\
+\textbf{CNN verifier at 0.30 (chosen)} & \textbf{486} & \textbf{32} \\
+CNN verifier at 0.50 & 461 & 9 \\
++ motion gate, size gate 0.15 & 438 & 3 \\
++ motion gate, size gate 0.10 & 469 & 15 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Verifier.} At 0.30 the CNN keeps 97.4\% of true hand frames while
+cutting clutter locks by 79\%. The logistic baseline is worse than no
+filtering (it loses 120 hand frames and adds 34 clutter locks), and its
+held-out AUC is 0.788 against 0.965 for the CNN. We do not have score-level
+data for full ROC curves, so Table~\ref{tab:ablation} gives measured
+operating points instead. The 130k verifier raised detector-recipe hand
+recall on VeryLowLight crops from 4.9\% to 58.5\% at matched own-room
+clutter rejection, but at lower portability (HaGRID clutter cut 91.5\% to
+70.9\%, AUC 0.965 to 0.947).
+
+\textbf{Motion gate.} Alone it removes 29 of 32 clutter locks but costs 48
+hand frames, because it correctly refuses to bootstrap far-range
+acquisitions from clutter. Relaxing the size gate to 0.10, safe only
+because the motion gate now does the filtering, recovers 31 frames and cuts
+clutter locks 53\% against the ungated verifier. Both empty-room clips give
+zero acquisitions at every gate value down to 0.06.
+
+\textbf{Motion blobs.} Across the 291 target-condition hand frames, blobs
+propose the hand a little more often than the detector's box contains it
+(36.8\% against 35.7\%), but on the frames where the detector fails outright
+blobs propose a hand in 21.4\% of cases and the blob verifier confirms only
+7.5\% of those, a ceiling of about 14 frames (4.8 points) before any
+clutter cost. Without a blob
+verifier they raise VeryLowLight clutter locks from 98 to 405 and lock onto
+a synthetic moving non-hand object every time, so blobs are off in the
+default. In the dark variant they stay on, because they enable
+verifier-gated acquisition: turning them off raises the no-hand false-lock
+rate from 1.0\% to 12.3\%.
+
+\subsection{Detector fine-tune and consensus}
+Fine-tuning gives the largest single gain, and it is a redistribution. With
+the fine-tuned detector alone, VeryLowLight F1 rises 10.4 to 31.5 (28.0
+with the TRACK hold, Table~\ref{tab:main}), FarDark 14.9 to 50.9 and
+FarLight 32.3 to 50.2, but CloseDarkStill falls 93.8 to 9.4 and
+CloseLightStill from 92.5 to 51.6. On the clean comparison, localisation on
+VeryLowLight held-out blocks rises 25.0\% to 33.0\% (train-minus-holdout
+gap 4.2 to 1.5 points) while CloseLightMoving falls 9.8 points. Since the
+31.5 includes fine-tuning blocks, the held-out localisation gain is the
+safer estimate of generalisation, and FarDark and FarLight are the better
+evidence because those clips were not used for fine-tuning. In this
+one-session evaluation the fine-tuned configurations produce no false locks
+either: every system scored 0.0\% on both empty-room clips. An earlier
+build of the dark variant measured 2.2\% false locks on NohandLight, and
+that does not reproduce in the fixed-timing harness, which is reported here
+because the number changed rather than because the new one is convenient.
+
+The TRACK hold (Table~\ref{tab:main}, Dark v3 to v4) is measured with both
+configurations in one process on the hand clips: off-hand cursor placements
+fall 316 to 150, wrong-location excursions 79 to 30 (62\% fewer) and
+persistent wrong locks 7 to 1, at a cost of 7.3 points of recall (40.0 to
+32.7) and 3.4 of F1 (48.8 to 45.4). F1 counts frames with a reported
+position, so holding the cursor lowers it by construction, and a cursor
+that is briefly still is a different defect from one that jumps: F1 alone
+undervalues this change and an excursion metric alone would hide the recall
+cost. Acquisition consensus on its own is neutral end to end, and on
+CloseDarkStill it fails structurally: false detections are stable and true
+ones transient, so agreement over time discards the truth (F1 93.8 to 9.4).
+That clip needs a crop-level discriminator, not more timing logic.
+
+\subsection{Training runs across seeds}
+\label{sec:seeds}
+
+Ten seeds were planned for each of the four verifier variants and for the
+detector fine-tune, and the campaign was stopped before it finished. We
+report the counts as they stand rather than implying a uniform campaign:
+ten seeds for the 11k variant, nine for the target-condition variant, three
+for the 130k variant, none for the 84k dark-augmented variant, and five for
+the detector fine-tune. The per-seed end-to-end pipeline evaluation, which
+would turn these into per-clip and aggregate F1 means, was not run, so the
+table reports what the seeds actually vary: the verifier's own held-out
+AUC, the epoch its validation loss selected, and the threshold chosen for
+it on the validation blocks.
+
+\begin{table}[t]
+\caption{Verifier variants retrained from scratch with the shared seed
+list, mean $\pm$ standard deviation over the seeds that completed. HaGRID
+AUC is on the HaGRID test crops (blank where the variant's pool contains
+none); target AUC is on the VeryLowLight test blocks (blank where the pool
+has no target-condition crops). Threshold is the per-variant operating
+point selected on the 151 validation frames, and its spread is a property
+of that validation set, not of the seed.}
+\label{tab:seeds}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Variant & Seeds & HaGRID AUC & Target AUC & Thr. & Epoch & Train s \\
+\midrule
+11k mined         & 10 & 0.975$\pm$0.005 & -- & 0.08$\pm$0.06 & 7.8$\pm$4.0 & 25 \\
+130k arbitered    &  3 & 0.951$\pm$0.008 & 0.64$\pm$0.07 & 0.10$\pm$0.07 & 2.0$\pm$1.7 & 576 \\
+Target-cond.      &  9 & 0.972$\pm$0.006 & 0.71$\pm$0.08 & 0.23$\pm$0.16 & 7.1$\pm$4.3 & 22 \\
+84k dark-aug.     &  0 & \multicolumn{5}{c}{not run} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two findings come out of the seeds that did run, and they point in opposite
+directions. The weights are stable: held-out AUC varies by 0.005 to 0.008
+across seeds, a factor of three or four below the 0.02 AUC gap between the
+130k variant and the two small ones, so that ranking is not seed noise. The
+operating threshold is not stable: it ranges from 0.05 to 0.50 across the
+seeds, standard deviation 0.06 to 0.16 within a variant, because 151
+validation frames cannot pin it down. The detector fine-tune completed five
+seeds: on the target-condition test blocks the share of frames whose
+detection boxes contain the hand is 45.5\% (SD 2.0), every seed selected its
+final epoch, mean training time was 222 s, and the collapse guard never
+tripped, the worst seed leaving 5 anchors above 0.5 against a limit of 100.
+
+\subsection{Domain dependence and statistical position}
+\label{sec:stats}
+The dark verifier keeps 61.3\% of held-out hand crops in the recorded
+colour cast, 38.7\% under a warmer relighting, 52.4\% under a cooler one,
+and only 4.0\% with the cast removed. It has partly learned this lamp's
+colour. This is a measured generalisation failure, not a hypothetical one.
+
+We can test, because the per-frame decision of all seven systems was kept
+for every frame of every clip. Those decisions are paired binary outcomes on
+the same frames, so the exact McNemar test on the discordant pairs answers
+``does A decide better than B'' without discarding the pairing or assuming a
+distribution. F1 is not a mean over independent frames, so an F1 difference
+gets a 95\% interval from a block bootstrap over 50-frame blocks within each
+clip (2{,}000 resamples, seed 12{,}345), which keeps the local correlation
+of neighbouring frames. The ten comparisons form one family,
+Holm-Bonferroni adjusted, $\alpha=0.05$.
+
+\begin{table}[t]
+\caption{Paired tests over the six hand clips (1,553 frames). A/B counts
+frames where A decided correctly and B did not, and the reverse; $p$ is the
+exact McNemar test on those discordant pairs, Holm-Bonferroni adjusted
+across all ten comparisons. $\Delta$F1 carries a 95\% block-bootstrap
+interval (50-frame blocks, 2{,}000 resamples, seed 12{,}345). A dagger
+marks a frame-level difference that is significant while the F1 interval
+still spans zero, so the two tests are answering different questions.}
+\label{tab:stats}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+A & B & A/B & $p$ (Holm) & $\Delta$F1 & 95\% CI & Sig. \\
+\midrule
+MP raw & default & 553/38 & 3e-117 & $+0.31$ & $+0.226,+0.403$ & yes \\
+MP raw & big & 538/60 & 3e-96 & $+0.29$ & $+0.195,+0.384$ & yes \\
+MP raw & dark v3 & 608/84 & 5e-98 & $+0.33$ & $+0.244,+0.414$ & yes \\
+MP raw & dark v4 & 638/57 & 3e-124 & $+0.36$ & $+0.281,+0.445$ & yes \\
+MP raw & MP CLAHE & 55/29 & 0.018 & $+0.01$ & $-0.002,+0.025$ & yes$^{\dagger}$ \\
+MP raw & MP gamma & 66/30 & 2e-03 & $+0.02$ & $+0.002,+0.033$ & yes \\
+MP CLAHE & MP gamma & 43/33 & 0.302 & $+0.01$ & $-0.009,+0.022$ & no \\
+default & big & 54/91 & 0.011 & $-0.02$ & $-0.066,+0.014$ & yes$^{\dagger}$ \\
+big & dark v3 & 262/216 & 0.079 & $+0.04$ & $-0.036,+0.103$ & no \\
+dark v3 & dark v4 & 112/55 & 7e-05 & $+0.03$ & $+0.001,+0.067$ & yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The comparison the report rests on is supported without qualification: each
+of our four configurations differs from MediaPipe at
+$p_{\text{Holm}}<10^{-95}$, with an interval nowhere near zero. The rest of
+the family is largely negative and is reported that way. Big against dark v3
+is not significant ($p_{\text{Holm}}=0.079$), so its 3.7-point aggregate
+advantage is not claimed; CLAHE against gamma is not significant either
+($p_{\text{Holm}}=0.302$), so the two preprocessing variants are treated as
+equally unhelpful rather than ranked. Two rows are significant at the frame
+level while their F1 intervals span zero, and they are the ones to read
+carefully: CLAHE loses more frames than it wins (55 against 29) but its F1
+difference is inside the noise, so the claim is that it loses frames, not
+that it lowers F1; and the retrained verifier decides correctly on 91 frames
+where the default does not against 54 the other way
+($p_{\text{Holm}}=0.011$) while its F1 difference of 0.02 is not separable
+from zero, a real frame-level improvement that F1 alone would hide. The
+41.6\% mined-label error rate keeps its binomial interval ($\pm0.6$ points,
+ignoring clustering), and the arbiter ablation is re-measured on one
+identical held-out pool of 4{,}071 crops: AUC 0.860 unfiltered against 0.959
+arbitered, mean $P(\text{hand})$ on clutter 0.44 against 0.20.
+
+\subsection{Computational cost}
+BlazePalm has 1,763,358 parameters (7.1 MB). The verifier adds 60,929 (255
+KB) and the fine-tune adds none. The pipeline runs at 19 to 22 ms per frame
+on CPU with blobs off and 21 to 40 ms with blobs on, against 0.2 to 0.3 ms
+for MediaPipe's cached detection step: about two orders of magnitude
+slower, but still about 50 fps, enough for slow gestures. One anomalous run
+measured the same configuration 2.2 to 4.6 times slower under host
+contention, so timings are indicative. Verifier training took 22 to 576 s
+per variant (mean over the seeds that completed, so the spread between
+variants is the crop-set size), the detector fine-tune 222 s, and the
+failed fine-tune 210 s. Building the system needed far more
+than it ships: about 10 GB of HaGRIDv2 and 1.4 million generated crops for
+a 255 KB verifier.
+
+\section{Ethical Considerations}
+\label{sec:ethics}
+
+\textbf{Licensing and provenance.} HaGRID is released under CC BY-SA 4.0
+\cite{hagrid}. We obtained HaGRIDv2 from two third-party mirrors
+(\texttt{zhouxzh/portable-hagridv2-mediapipe-hand} and
+\texttt{testdummyvt/hagRIDv2\_512px}) rather than the official release, so
+completeness and licence-file preservation are not guaranteed. Whether a
+model trained on CC BY-SA images is ``adapted material'' is unsettled, and
+we state the licence without a legal conclusion. No HaGRID images appear
+here.
+
+\textbf{Privacy.} All eight clips show only the author's hand and room,
+recorded with consent. HaGRID's subjects consented to that dataset's
+release, which we rely on. The application processes frames in memory,
+writes nothing to disk and makes no network calls.
+
+\textbf{Bias and representation.} Dark training and test data come from one
+person, room, lamp and camera (about 200 labelled frames), so no cross-user
+or cross-environment generalisation is shown, and the colour-cast result
+above shows the dependence. Label cleaning uses MediaPipe's landmark head
+as arbiter, so any blind spot of that model (skin tone, hand size, unusual
+posture) is inherited by our data and is not characterised.
+
+\textbf{Safety and misuse.} Misuse potential is low: the output is local
+cursor coordinates. The realistic risk is presenting this as an
+accessibility aid. The system reports a position on only 37.9\% of frames
+in its default configuration, has documented wrong-location excursions, and
+was trained on one user, so it is a classroom prototype and not validated
+for people who depend on it. Moving the cursor to a screen corner aborts
+the program (pyautogui fail-safe) and is the only user-facing stop. The
+motion gate assumes a stationary camera.
+
+\textbf{Environmental cost.} Development used about 10 GB of downloads, 1.4
+million generated crops and 16 PyInstaller builds. Energy was not measured.
+
+\section{Conclusions and Future Work}
+
+\textbf{Answer.} Partly, and only in specific conditions. MediaPipe wins in
+aggregate (F1 81.6\% against 45.4 to 52.5\%), and paired tests confirm the
+gap at $p_{\text{Holm}}<10^{-95}$. At close range the gap is 6 to 15 points
+with identical false-lock behaviour, zero for every configuration. In the
+target regime the dark variant raises VeryLowLight F1 from 10.4 to 31.5
+(3.0$\times$; 1.5$\times$ over the 130k-verifier configuration at 21.5), but
+still trails MediaPipe's 65.1 by 34 points, and the 31.5 is partly
+in-sample because that column includes the blocks used for fine-tuning. The
+gain is a redistribution, with a close-static collapse from 93.8 to 9.4. Two
+interventions that looked plausible from the signal-processing side were
+tested and failed: classical contrast enhancement in front of MediaPipe,
+and motion-based proposals aimed at the detector's misses. The binding
+constraint is the palm detector, which loses 64.3\% of target hand frames
+before any added component acts. Our single narrow intervention there gave
+the largest gain.
+
+\textbf{Limitations.} One dark session, one person; the verifier variants
+completed 3 to 10 seeds and the detector fine-tune 5, so the end-to-end F1
+figures still come from single runs even though the verifier's own AUC has
+a variance estimate; MediaPipe-derived ground truth, with no human labels,
+so every number measures agreement with MediaPipe; validation blocks that
+are not representative of the test blocks, and every threshold quoted is
+one draw from a wide interval because of it; one sample per condition; a
+cursor only, with no click vocabulary. The training runs were cheap (22 to
+576 s per model on CPU) and were stopped by time, not by compute, which is
+the weakest part of this evaluation.
+
+\textbf{Future work.} (1) Finish the seed campaign, and run the per-seed
+end-to-end pipeline evaluation so the end-to-end F1 figures carry a variance
+estimate rather than only the verifier's AUC. (2) Select thresholds on more
+validation frames, or select them per seed and report the spread, since the
+present 151 frames leave the threshold uncertain by a factor of ten. (3)
+Hand-label a subset of VeryLowLight to break the circular ground truth; the
+150-frame list and the labelling tool exist but no labels were collected.
+(4) Fine-tune the detector on broader artificial-light data, which is the
+64.3\% loss and the only component with demonstrated headroom. (5) Record a
+second dark session in a different room, and real moving clutter for the
+blob path. (6) Add a crop-level discriminator for stable false positives,
+which is what CloseDarkStill needs.
+
+\section*{Statement}
+This report and the project it describes are my own work. Code:
+\url{https://github.com/Filkspline/AI339ProjectRepo}. Tools: Python,
+PyTorch \cite{pytorch}, OpenCV \cite{opencv}, MediaPipe \cite{mediapipe_github},
+pyautogui, PyInstaller, \LaTeX.
+
+Generative AI: I used DeepSeek's agentic coding harness (DeepSeek V4),
+run directly in the project folder, to set up the project's file structure
+and to help implement and run the system under my own iterative, continuous
+instruction. Across development I set the direction and the experiments to
+run, reviewed every result it reported, and made every design decision,
+threshold and scope decision in this report myself; the agent did not work
+autonomously or choose what to build, measure, or report. I also used an
+AI assistant (Claude) to help plan prompts for the coding agent and to help
+draft and edit this report from my own project notes and the agent's
+measured results. I reviewed and am responsible for all code, results,
+claims and references in this report. External resources: BlazePalm
+\cite{blazepalm_port} and its released weights \cite{mediapipe_github},
+MediaPipe Hands \cite{mediapipe}, and HaGRIDv2 \cite{hagrid2} via the two
+mirrors named in Section~\ref{sec:ethics}.
+
+\begin{thebibliography}{00}
+\bibitem{mediapipe} F.~Zhang, V.~Bazarevsky, A.~Vakunov, A.~Tkachenka,
+G.~Sung, C.-L.~Chang, and M.~Grundmann, ``MediaPipe Hands: On-device
+Real-time Hand Tracking,'' arXiv:2006.10214, 2020.
+\bibitem{mediapipe_github} Google, ``MediaPipe,'' GitHub repository, 2020.
+[Online]. Available: https://github.com/google/mediapipe
+\bibitem{blazeface} V.~Bazarevsky, Y.~Kartynnik, A.~Vakunov, K.~Raveendran,
+and M.~Grundmann, ``BlazeFace: Sub-millisecond Neural Face Detection on
+Mobile GPUs,'' arXiv:1907.05047, 2019.
+\bibitem{blazepalm_port} V.~Satija, ``BlazePalm: PyTorch and CoreML
+implementation of MediaPipe Hands,'' GitHub repository. [Online].
+Available: https://github.com/vidursatija/BlazePalm
+\bibitem{hagrid} A.~Kapitanov, K.~Kvanchiani, A.~Nagaev, R.~Kraynov, and
+A.~Makhliarchuk, ``HaGRID -- HAnd Gesture Recognition Image Dataset,'' in
+\emph{Proc. IEEE/CVF WACV}, 2024; arXiv:2206.08219.
+\bibitem{hagrid2} A.~Nuzhdin, A.~Nagaev, A.~Sautin, A.~Kapitanov, and
+K.~Kvanchiani, ``HaGRIDv2: 1M Images for Static and Dynamic Hand Gesture
+Recognition,'' in \emph{Proc. WSCG}, 2025.
+\bibitem{clahe} K.~Zuiderveld, ``Contrast Limited Adaptive Histogram
+Equalization,'' in \emph{Graphics Gems IV}. Academic Press, 1994, pp.
+474--485.
+\bibitem{pytorch} A.~Paszke et al., ``PyTorch: An Imperative Style,
+High-performance Deep Learning Library,'' in \emph{Proc. NeurIPS}, 2019.
+\bibitem{opencv} G.~Bradski, ``The OpenCV Library,'' \emph{Dr.\ Dobb's
+Journal of Software Tools}, 2000.
+\end{thebibliography}
+
+\end{document}

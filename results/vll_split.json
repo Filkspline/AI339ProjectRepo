@@ -1,0 +1,33 @@
+{
+  "clip": "VeryLowLight.mp4",
+  "block_frames": 50,
+  "n_frames": 651,
+  "split_seed": 0,
+  "deal": {
+    "n_train_blocks": 5,
+    "n_val_blocks": 4,
+    "n_test_blocks": 5
+  },
+  "block_roles": {
+    "0": "train",
+    "1": "test",
+    "2": "train",
+    "3": "train",
+    "4": "train",
+    "5": "train",
+    "6": "test",
+    "7": "val",
+    "8": "test",
+    "9": "test",
+    "10": "val",
+    "11": "val",
+    "12": "test",
+    "13": "val"
+  },
+  "frames": {
+    "train": 250,
+    "val": 151,
+    "test": 250
+  },
+  "note": "Blocks are dealt by a seeded shuffle of block indices. All model selection uses train + val only. The test blocks are evaluated once and never used to choose a threshold, epoch, augmentation setting or tolerance."
+}

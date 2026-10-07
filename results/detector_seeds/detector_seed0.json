@@ -1,0 +1,22 @@
+{
+  "seed": 0,
+  "trainable_params": 43966,
+  "train_seconds": 326.9,
+  "best_epoch": 15,
+  "best_val_loss": 3.808286,
+  "val_contain": 0.678571,
+  "val_fire": 0.732143,
+  "test_contain": 0.45283,
+  "test_fire": 0.584906,
+  "light_mean_contain": 0.539455,
+  "collapse_hot_anchors": 5,
+  "collapse_tripped": false,
+  "saved": "C:\\Users\\leori\\Desktop\\School\\AI339\\results\\detector_seeds\\detector_seed0.pth",
+  "contain_CloseLightMoving": 0.890805,
+  "contain_CloseLightStill": 1.0,
+  "contain_CloseDarkStill": 0.968085,
+  "contain_FarLight": 0.573034,
+  "contain_FarDark": 0.344262,
+  "contain_NohandLight": 0.0,
+  "contain_NohandDark": 0.0
+}

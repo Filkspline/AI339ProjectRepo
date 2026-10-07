@@ -1,0 +1,75 @@
+PER-CLIP AND AGGREGATE METRICS, one session, identical truth
+truth: MediaPipe static mode on raw frames, +-5 frame borrow
+
+system                                      clip                     acc   TP   FP   prec    rec     F1  locks
+--------------------------------------------------------------------------------------------------------------
+MediaPipe (tracking, raw)                   CloseLightMoving.mp4     174  174    0  100.0  100.0  100.0      -
+MediaPipe (tracking, raw)                   CloseLightStill.mp4      209  209    0  100.0  100.0  100.0      -
+MediaPipe (tracking, raw)                   CloseDarkStill.mp4        94   94    0  100.0  100.0  100.0      -
+MediaPipe (tracking, raw)                   FarLight.mp4             122  105   17   86.1   66.5   75.0      -
+MediaPipe (tracking, raw)                   FarDark.mp4              136  130    6   95.6   65.7   77.8      -
+MediaPipe (tracking, raw)                   NohandLight.mp4            0    0    0                         0.0
+MediaPipe (tracking, raw)                   NohandDark.mp4             0    0    0                         0.0
+MediaPipe (tracking, raw)                   VeryLowLight.mp4         396  287  109   72.5   59.1   65.1      -
+  -> aggregate (hand clips)                                         1131  999  132   88.3   75.7   81.6    0.0
+
+MediaPipe + CLAHE                           CloseLightMoving.mp4     174  174    0  100.0  100.0  100.0      -
+MediaPipe + CLAHE                           CloseLightStill.mp4      209  209    0  100.0  100.0  100.0      -
+MediaPipe + CLAHE                           CloseDarkStill.mp4        94   94    0  100.0  100.0  100.0      -
+MediaPipe + CLAHE                           FarLight.mp4             108  102    6   94.4   64.6   76.7      -
+MediaPipe + CLAHE                           FarDark.mp4              126  122    4   96.8   61.6   75.3      -
+MediaPipe + CLAHE                           NohandLight.mp4            0    0    0                         0.0
+MediaPipe + CLAHE                           NohandDark.mp4             0    0    0                         0.0
+MediaPipe + CLAHE                           VeryLowLight.mp4         378  267  111   70.6   54.9   61.8      -
+  -> aggregate (hand clips)                                         1089  968  121   88.9   73.4   80.4    0.0
+
+MediaPipe + gamma 0.5                       CloseLightMoving.mp4     174  174    0  100.0  100.0  100.0      -
+MediaPipe + gamma 0.5                       CloseLightStill.mp4      209  209    0  100.0  100.0  100.0      -
+MediaPipe + gamma 0.5                       CloseDarkStill.mp4        94   94    0  100.0  100.0  100.0      -
+MediaPipe + gamma 0.5                       FarLight.mp4              82   80    2   97.6   50.6   66.7      -
+MediaPipe + gamma 0.5                       FarDark.mp4              132  128    4   97.0   64.6   77.6      -
+MediaPipe + gamma 0.5                       NohandLight.mp4            0    0    0                         0.0
+MediaPipe + gamma 0.5                       NohandDark.mp4             0    0    0                         0.0
+MediaPipe + gamma 0.5                       VeryLowLight.mp4         388  272  116   70.1   56.0   62.2      -
+  -> aggregate (hand clips)                                         1079  957  122   88.7   72.6   79.8    0.0
+
+Ours default (verifier_cnn.pt @0.30)        CloseLightMoving.mp4     157  143   14   91.1   82.2   86.4      -
+Ours default (verifier_cnn.pt @0.30)        CloseLightStill.mp4      180  180    0  100.0   86.1   92.5      -
+Ours default (verifier_cnn.pt @0.30)        CloseDarkStill.mp4        83   83    0  100.0   88.3   93.8      -
+Ours default (verifier_cnn.pt @0.30)        FarLight.mp4              34   31    3   91.2   19.6   32.3      -
+Ours default (verifier_cnn.pt @0.30)        FarDark.mp4               30   17   13   56.7    8.6   14.9      -
+Ours default (verifier_cnn.pt @0.30)        NohandLight.mp4            0    0    0                         0.0
+Ours default (verifier_cnn.pt @0.30)        NohandDark.mp4             0    0    0                         0.0
+Ours default (verifier_cnn.pt @0.30)        VeryLowLight.mp4         130   32   98   24.6    6.6   10.4      -
+  -> aggregate (hand clips)                                          614  486  128   79.2   36.8   50.3    0.0
+
+Ours big verifier (verifier_cnn_big.pt @0.61)CloseLightMoving.mp4     164  145   19   88.4   83.3   85.8      -
+Ours big verifier (verifier_cnn_big.pt @0.61)CloseLightStill.mp4      180  180    0  100.0   86.1   92.5      -
+Ours big verifier (verifier_cnn_big.pt @0.61)CloseDarkStill.mp4        77   77    0  100.0   81.9   90.1      -
+Ours big verifier (verifier_cnn_big.pt @0.61)FarLight.mp4              80   41   39   51.2   25.9   34.5      -
+Ours big verifier (verifier_cnn_big.pt @0.61)FarDark.mp4               17   13    4   76.5    6.6   12.1      -
+Ours big verifier (verifier_cnn_big.pt @0.61)NohandLight.mp4            0    0    0                         0.0
+Ours big verifier (verifier_cnn_big.pt @0.61)NohandDark.mp4             0    0    0                         0.0
+Ours big verifier (verifier_cnn_big.pt @0.61)VeryLowLight.mp4         165   70   95   42.4   14.4   21.5      -
+  -> aggregate (hand clips)                                          683  526  157   77.0   39.9   52.5    0.0
+
+Dark v3 (acquire agreement)                 CloseLightMoving.mp4     155  154    1   99.4   88.5   93.6      -
+Dark v3 (acquire agreement)                 CloseLightStill.mp4      150   98   52   65.3   46.9   54.6      -
+Dark v3 (acquire agreement)                 CloseDarkStill.mp4        55    7   48   12.7    7.4    9.4      -
+Dark v3 (acquire agreement)                 FarLight.mp4             145   76   69   52.4   48.1   50.2      -
+Dark v3 (acquire agreement)                 FarDark.mp4              132   84   48   63.6   42.4   50.9      -
+Dark v3 (acquire agreement)                 NohandLight.mp4            0    0    0                         0.0
+Dark v3 (acquire agreement)                 NohandDark.mp4             0    0    0                         0.0
+Dark v3 (acquire agreement)                 VeryLowLight.mp4         207  109   98   52.7   22.4   31.5      -
+  -> aggregate (hand clips)                                          844  528  316   62.6   40.0   48.8    0.0
+
+Dark v4 (acquire + tracking hold)           CloseLightMoving.mp4     143  143    0  100.0   82.2   90.2      -
+Dark v4 (acquire + tracking hold)           CloseLightStill.mp4       97   79   18   81.4   37.8   51.6      -
+Dark v4 (acquire + tracking hold)           CloseDarkStill.mp4        37    4   33   10.8    4.3    6.1      -
+Dark v4 (acquire + tracking hold)           FarLight.mp4              79   41   38   51.9   25.9   34.6      -
+Dark v4 (acquire + tracking hold)           FarDark.mp4              112   80   32   71.4   40.4   51.6      -
+Dark v4 (acquire + tracking hold)           NohandLight.mp4            0    0    0                         0.0
+Dark v4 (acquire + tracking hold)           NohandDark.mp4             0    0    0                         0.0
+Dark v4 (acquire + tracking hold)           VeryLowLight.mp4         113   84   29   74.3   17.3   28.0      -
+  -> aggregate (hand clips)                                          581  431  150   74.2   32.7   45.4    0.0
+

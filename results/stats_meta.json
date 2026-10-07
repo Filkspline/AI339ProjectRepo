@@ -1,0 +1,7 @@
+{
+  "alpha": 0.05,
+  "bootstrap_seed": 12345,
+  "bootstrap_n": 2000,
+  "bootstrap_block": 50,
+  "note": "Holm-Bonferroni applied within each family. McNemar is the exact binomial test on discordant pairs. A frame is correct if a hand present was found within the match radius, or if no hand was present and nothing was accepted."
+}

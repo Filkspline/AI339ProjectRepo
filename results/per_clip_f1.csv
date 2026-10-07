@@ -1,0 +1,9 @@
+clip,kind,metric,frames,truth_frames,MP,MP+CLAHE,Default,Big,Dark v3,Dark v4
+CloseLightMoving,hand,f1_percent,174,174,100.0,100.0,86.4,85.8,93.6,90.2
+CloseLightStill,hand,f1_percent,209,209,100.0,100.0,92.5,92.5,54.6,51.6
+CloseDarkStill,hand,f1_percent,94,94,100.0,100.0,93.8,90.1,9.4,6.1
+FarLight,hand,f1_percent,195,158,75.0,76.7,32.3,34.5,50.2,34.6
+FarDark,hand,f1_percent,230,198,77.8,75.3,14.9,12.1,50.9,51.6
+VeryLowLight,hand,f1_percent,651,486,65.1,61.8,10.4,21.5,31.5,28.0
+NohandLight,nohand,false_lock_rate_percent,45,0,0.0,0.0,0.0,0.0,0.0,0.0
+NohandDark,nohand,false_lock_rate_percent,53,0,0.0,0.0,0.0,0.0,0.0,0.0

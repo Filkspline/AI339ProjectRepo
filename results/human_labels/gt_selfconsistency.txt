@@ -1,0 +1,16 @@
+frames selected for hand labelling: 150
+clip VeryLowLight, 651 frames total, split seed 0 test blocks [1, 6, 8, 9, 12]
+
+what each truth says about the same 150 frames
+  static MediaPipe sees a hand :  61 (40.7%)
+  tracking MediaPipe sees one  :  73 (48.7%)
+  both agree a hand is present :  59
+  both agree no hand           :  75
+  static only                  :   2
+  tracking only                :  14
+  agreement on presence        : 134/150 = 89.3%
+
+when both see the hand, how far apart are the two positions?
+  frame width 640 px; offset in frame widths
+  median 0.0020  p90 0.1290  max 0.6096
+  further apart than the evaluation's own match radius: 6 of 59 (10.2%)

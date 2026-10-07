@@ -1,0 +1,8 @@
+Detector containment on the VeryLowLight split (split seed 0)
+  frames with a hand: train 129, val 56, test 106
+  containment = a decoded box covers the palm centre, tol 0.15 of the box width (containment() in finetune_detector_seeds.py)
+  UNMODIFIED detector, train (129 frames): containment  17.8%   fired  95.3%
+  UNMODIFIED detector, val   (56 frames): containment  80.4%   fired  89.3%
+  UNMODIFIED detector, test  (106 frames): containment  30.2%   fired  80.2%
+  FINE-TUNED  detector, test  (5 seeds): containment  45.5%  SD  2.0  range 42.5 to 48.1
+  FINE-TUNED  detector, val   (5 seeds): containment  65.7%  SD  1.5  range 64.3 to 67.9

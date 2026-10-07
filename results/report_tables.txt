@@ -1,0 +1,100 @@
+================================================================================================
+TABLE 1  main comparison, one session, identical truth
+================================================================================================
+system                 frames truth   acc   acc%  prec%   rec%    F1%  locks%
+MediaPipe (raw)          1553  1319  1131   72.8   88.3   75.7   81.6     0.0
+MediaPipe + CLAHE        1553  1319  1089   70.1   88.9   73.4   80.4     0.0
+MediaPipe + gamma 0.5    1553  1319  1079   69.5   88.7   72.6   79.8     0.0
+Ours default             1553  1319   614   39.5   79.2   36.8   50.3     0.0
+Ours big verifier        1553  1319   683   44.0   77.0   39.9   52.5     0.0
+Dark v3                  1553  1319   844   54.3   62.6   40.0   48.8     0.0
+Dark v4                  1553  1319   581   37.4   74.2   32.7   45.4     0.0
+
+================================================================================================
+TABLE 2  per-clip F1 (%), same session
+================================================================================================
+clip                 MediaPipe (raw)      Ours default Ours big verifier           Dark v3           Dark v4
+CloseLightMoving               100.0              86.4              85.8              93.6              90.2
+CloseLightStill                100.0              92.5              92.5              54.6              51.6
+CloseDarkStill                 100.0              93.8              90.1               9.4               6.1
+FarLight                        75.0              32.3              34.5              50.2              34.6
+FarDark                         77.8              14.9              12.1              50.9              51.6
+VeryLowLight                    65.1              10.4              21.5              31.5              28.0
+NohandLight                      0.0               0.0               0.0               0.0               0.0   (false-lock rate)
+NohandDark                       0.0               0.0               0.0               0.0               0.0   (false-lock rate)
+
+================================================================================================
+TABLE 3  VeryLowLight by split role (per-frame)
+================================================================================================
+system                role    frames  truth   acc   acc%  prec%   rec%    F1%
+MediaPipe (raw)       train      250    211   202   80.8   54.0   51.7   52.8
+MediaPipe (raw)       val        151    126    72   47.7   94.4   54.0   68.7
+MediaPipe (raw)       test       250    149   122   48.8   90.2   73.8   81.2
+MediaPipe + CLAHE     train      250    211   201   80.4   52.2   49.8   51.0
+MediaPipe + CLAHE     val        151    126    61   40.4   95.1   46.0   62.0
+MediaPipe + CLAHE     test       250    149   116   46.4   89.7   69.8   78.5
+MediaPipe + gamma 0.5 train      250    211   204   81.6   50.0   48.3   49.2
+MediaPipe + gamma 0.5 val        151    126    70   46.4   94.3   52.4   67.3
+MediaPipe + gamma 0.5 test       250    149   114   45.6   91.2   69.8   79.1
+Ours default          train      250    211    83   33.2   25.3   10.0   14.3
+Ours default          val        151    126    18   11.9   16.7    2.4    4.2
+Ours default          test       250    149    29   11.6   27.6    5.4    9.0
+Ours big verifier     train      250    211    80   32.0   43.8   16.6   24.1
+Ours big verifier     val        151    126    49   32.5   51.0   19.8   28.6
+Ours big verifier     test       250    149    36   14.4   27.8    6.7   10.8
+Dark v3               train      250    211    74   29.6   62.2   21.8   32.3
+Dark v3               val        151    126    52   34.4   25.0   10.3   14.6
+Dark v3               test       250    149    81   32.4   61.7   33.6   43.5
+Dark v4               train      250    211    52   20.8   71.2   17.5   28.1
+Dark v4               val        151    126    13    8.6   53.8    5.6   10.1
+Dark v4               test       250    149    48   19.2   83.3   26.8   40.6
+
+================================================================================================
+TABLE 4  multi-seed results (mean and SD over seeds)
+================================================================================================
+source: results/verifier_seeds/*.json
+variant                   dataset              seeds       val_auc  hag_test_auc   vll_val_auc  vll_test_auc       test_f1test_precision   test_recall     threshold    best_epoch train_seconds        params
+verifier_cnn.pt           verifier_dataset        10  0.9725+-0.0047  0.9746+-0.0046           n/a           n/a  0.9353+-0.0228  0.8841+-0.0418  0.9942+-0.0043  0.0750+-0.0624  7.8000+-3.9665 24.7290+-1.651760929.0000+-0.0000
+verifier_cnn_big.pt       big_dataset              3  0.8989+-0.0193  0.9507+-0.0077  0.6746+-0.0810  0.6439+-0.0708  0.8811+-0.0091  0.8042+-0.0171  0.9745+-0.0049  0.1000+-0.0700  2.0000+-1.7321575.5533+-378.814360929.0000+-0.0000
+verifier_cnn_vll.pt       vll_dataset              9  0.9535+-0.0080  0.9717+-0.0061  0.6141+-0.0802  0.7148+-0.0778  0.9429+-0.0086  0.9115+-0.0234  0.9771+-0.0137  0.2267+-0.1583  7.1111+-4.2557 21.6300+-1.208560929.0000+-0.0000
+
+missing detector_seeds_summary.csv
+
+================================================================================================
+TABLE 5  paired tests (McNemar exact, block bootstrap 50-frame, Holm-Bonferroni)
+================================================================================================
+scope: six hand clips (the same aggregate as Table 1); the CSV also has
+rows for all eight clips, where 'correct' means accepting nothing
+A             B              A only B only          p     p_holm     dF1                95% CI   sig
+mp_raw        ours_default      553     38  3.14e-118  2.83e-117  0.3127     [+0.2258,+0.4029]  True
+mp_raw        ours_big61        538     60   4.87e-97   3.41e-96  0.2900     [+0.1947,+0.3843]  True
+mp_raw        dark_v3           608     84   6.60e-99   5.28e-98  0.3273     [+0.2441,+0.4136]  True
+mp_raw        dark_v4           638     57  3.06e-125  3.06e-124  0.3618     [+0.2815,+0.4451]  True
+mp_raw        mp_clahe           55     29   6.04e-03   1.81e-02  0.0115     [-0.0023,+0.0254]  True
+mp_raw        mp_gamma           66     30   3.06e-04   1.53e-03  0.0173     [+0.0016,+0.0333]  True
+mp_clahe      mp_gamma           43     33   3.02e-01   3.02e-01  0.0058     [-0.0092,+0.0222] False
+ours_default  ours_big61         54     91   2.67e-03   1.07e-02 -0.0226     [-0.0665,+0.0140]  True
+ours_big61    dark_v3           262    216   3.95e-02   7.89e-02  0.0373     [-0.0364,+0.1025] False
+dark_v3       dark_v4           112     55   1.22e-05   7.34e-05  0.0345     [+0.0010,+0.0670]  True
+
+missing stats_across_seeds.csv
+
+================================================================================================
+DETECTOR ATTRIBUTION (from the funnel logs in build/)
+================================================================================================
+--- funnel_new_default.log ---
+     frames with a hand (MediaPipe)     : 396 of 651 (60.8%)
+     detector did not fire at all       :   99 ( 25.0%)
+     detector fired, but off the hand   :  211 ( 53.3%)
+     size gate rejected                 :    0 (  0.0%)
+     motion gate rejected               :    9 (  2.3%)
+     CNN verifier rejected              :   71 ( 17.9%)
+     survived the whole chain           :    6 (  1.5%)
+--- funnel_new_big61.log ---
+     frames with a hand (MediaPipe)     : 396 of 651 (60.8%)
+     detector did not fire at all       :   99 ( 25.0%)
+     detector fired, but off the hand   :  211 ( 53.3%)
+     size gate rejected                 :    0 (  0.0%)
+     motion gate rejected               :    9 (  2.3%)
+     CNN verifier rejected              :   19 (  4.8%)
+     survived the whole chain           :   58 ( 14.6%)

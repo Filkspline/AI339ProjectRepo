@@ -1,0 +1,10 @@
+dataset big_dataset, held-out role 'test' only
+  sources: {'hagrid_test': 2990, 'vll_real_clutter': 58, 'vll_real_mp': 106, 'vll_real_det': 41, 'vll_real_clutter_aug': 480, 'vll_real_mp_aug': 309, 'vll_real_det_aug': 87}
+  crops: 4071  (2867 hand, 1204 clutter)
+
+unfiltered (earlier round)       AUC 0.8597  params 60929  (verifier_cnn_big_UNFILTERED.pt)
+                                 mean P(hand) on hand crops 0.9515, on clutter crops 0.4368
+arbitered, released              AUC 0.9586  params 60929  (verifier_cnn_big.pt)
+                                 mean P(hand) on hand crops 0.9637, on clutter crops 0.1967
+arbitered, current run seed 0    AUC 0.8997  params 60929  (results\verifier_seeds\verifier_cnn_big.pt_seed0.pt)
+                                 mean P(hand) on hand crops 0.8071, on clutter crops 0.2978
