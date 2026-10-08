@@ -291,6 +291,19 @@ the repo.
 | Wrong-place cursor events, before and after | dark stack, rules on and off | `python diagnose_lock_events.py` |
 | The parameters for the agreement rules | measured candidate positions | `python diagnose_acquire_consensus.py` |
 | Threshold sweeps | all verifier models | `python sweep_verifier_threshold.py` |
+| Aggregate precision, recall and F1 for all seven systems (the report's aggregate table) | one session, one truth, seven systems including the two contrast baselines | `python evaluate_all_systems.py` -> `results/summary_all_systems.csv` |
+| Per-clip F1 behind the report's per-clip figure | the same single-session run | `python export_per_clip_f1.py` -> `results/per_clip_f1.csv` |
+| Verifier variants retrained over seeds | 3 to 10 seeds, 15 epochs, checkpoint chosen by lowest validation loss | `python train_verifier_seeds.py --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 15` -> `results/verifier_seeds/*.json` |
+| Detector fine-tune over seeds | 5 seeds, six prediction heads only | `python finetune_detector_seeds.py --seeds 0,1,2,3,4 --epochs 15` -> `results/detector_seeds/*.json` |
+| Operating threshold per variant | validation blocks only, split seed 0 | `python seeds_pipeline_eval.py --phase select` -> `results/thresholds.json` |
+| Paired significance tests | exact McNemar, 50-frame block bootstrap, Holm-Bonferroni | `python stats_tests.py` -> `results/stats_paired_frames.csv` |
+| Convergence and cross-seed figures | from the seed runs above | `python plots_report.py` -> `results/report_figures/` |
+| Unmodified detector against the fine-tuned seeds | the same target-condition test blocks | `python detector_baseline_containment.py` -> `results/detector_baseline_containment.txt` |
+| Every table as plain text, and LaTeX for the seed and statistics tables | any of the above | `python report_tables.py`; `python make_latex_tables.py` |
+
+`REPRODUCING_THE_REPORT.md` has the full detail: environments with versions, data
+preparation, every training and evaluation command, and the table-and-figure to
+configuration map.
 
 Outputs for the first six are already in `results/`, so you can read the numbers without
 re-running anything.
